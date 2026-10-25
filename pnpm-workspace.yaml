@@ -1,3 +1,5 @@
 packages:
   - "apps/web"
   - "apps/remotion"
+allowBuilds:
+  esbuild: true

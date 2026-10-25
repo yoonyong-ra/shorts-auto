@@ -914,13 +914,23 @@ export function ProductionPanel({
                 <span style={{ fontSize: "28px", lineHeight: 1 }}>🚨</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: "15px", fontWeight: "bold", color: "#dc2626" }}>
-                    로컬 TTS 서버 연결 실패!
+                    {ttsError === "Failed to fetch" ? "TTS 생성 응답 시간 초과 또는 연결 지연" : "로컬 TTS 서버 연결 실패!"}
                   </div>
                   <div style={{ fontSize: "13px", color: "#b91c1c", marginTop: "4px", lineHeight: "1.5" }}>
-                    {ttsError}
+                    {ttsError === "Failed to fetch"
+                      ? "브라우저 프록시 대기 시간(10분)을 초과했습니다. 하지만 백엔드에서는 음성 생성이 백그라운드에서 정상 완료되었을 수 있습니다."
+                      : ttsError}
                   </div>
                   <div style={{ fontSize: "12px", color: "#7f1d1d", marginTop: "8px", background: "rgba(255, 255, 255, 0.8)", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fca5a5" }}>
-                    💡 <strong>해결 방법:</strong> 로컬 터미널에서 Qwen3-TTS 서버를 먼저 실행하신 후 다시 [7. 음성 생성] 버튼을 눌러주세요.
+                    {ttsError === "Failed to fetch" ? (
+                      <>
+                        💡 <strong>해결 방법:</strong> 브라우저를 <strong>새로고침(F5)</strong>해 보세요! 이미 음성 생성이 완료되어 씬 데이터가 정상 로드될 수 있습니다.
+                      </>
+                    ) : (
+                      <>
+                        💡 <strong>해결 방법:</strong> 로컬 터미널에서 Qwen3-TTS 서버를 먼저 실행하신 후 다시 [7. 음성 생성] 버튼을 눌러주세요.
+                      </>
+                    )}
                   </div>
                 </div>
                 <button
