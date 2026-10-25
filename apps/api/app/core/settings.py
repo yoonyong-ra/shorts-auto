@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from dotenv import dotenv_values
@@ -43,7 +43,7 @@ class AppSettings(BaseModel):
     @classmethod
     def validate_output_dir(cls, value: str) -> str:
         path = Path(value)
-        if path.is_absolute():
+        if path.is_absolute() or bool(path.anchor) or PurePosixPath(value).is_absolute():
             raise ValueError("output_dir must be a relative path")
         if ".." in path.parts:
             raise ValueError("output_dir must not contain path traversal")
