@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -727,11 +729,14 @@ def _run_higgsfield_generate(
     resolution: str = "1k",
     multi_shots: bool = False,
     timeout_minutes: int = 15,
+    api_key: str | None = None,
 ) -> str:
     resolved_job_type = MODEL_ALIAS_MAP.get(job_type, job_type)
 
+    higgsfield_bin = shutil.which("higgsfield") or "higgsfield"
+
     cmd = [
-        "higgsfield", "generate", "create", resolved_job_type,
+        higgsfield_bin, "generate", "create", resolved_job_type,
         "--prompt", prompt,
         "--aspect-ratio", aspect_ratio,
         "--wait",
@@ -775,7 +780,19 @@ def _run_higgsfield_generate(
         else:
             cmd.extend(["--duration", str(duration)])
 
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_minutes * 60)
+    env = os.environ.copy()
+    if api_key:
+        env["HIGGSFIELD_API_KEY"] = api_key
+
+    is_win = sys.platform == "win32"
+    res = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout_minutes * 60,
+        shell=is_win,
+        env=env,
+    )
     if res.returncode != 0:
         raise RuntimeError(f"Higgsfield generate CLI 에러 ({res.returncode}): {res.stderr or res.stdout}")
 
@@ -833,6 +850,7 @@ def generate_scene_image_for_project(
             pass
 
     # 1. 힉스필드 모델 시도 (nano_banana_pro, gpt_image_2, seedream_v5_pro, flux_3_image 등)
+    errors: list[str] = []
     if model_name != "dall-e-3":
         try:
             image_url = _run_higgsfield_generate(
@@ -840,32 +858,39 @@ def generate_scene_image_for_project(
                 prompt=prompt,
                 aspect_ratio="9:16",
                 resolution="2k" if "gpt" in model_name or "seedream" in model_name else "1k",
+                api_key=settings.higgsfield_api_key,
             )
             resp = httpx.get(image_url, timeout=90.0)
             if resp.status_code == 200:
                 start_image_path.write_bytes(resp.content)
                 return start_image_path
-        except Exception:
-            pass
+            errors.append(f"Higgsfield 이미지 다운로드 실패 ({resp.status_code}): {image_url}")
+        except Exception as exc:
+            errors.append(f"Higgsfield ({model_name}) 생성 실패: {exc}")
 
     # 2. OpenAI DALL-E 3 시도
-    try:
-        client = OpenAI(api_key=settings.openai_api_key)
-        image_resp = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt[:950],
-            size="1024x1792",
-            quality="standard",
-            n=1,
-        )
-        dalle_url = image_resp.data[0].url
-        if dalle_url:
-            resp = httpx.get(dalle_url, timeout=60.0)
-            if resp.status_code == 200:
-                start_image_path.write_bytes(resp.content)
-                return start_image_path
-    except Exception:
-        pass
+    if settings.openai_api_key:
+        try:
+            client = OpenAI(api_key=settings.openai_api_key)
+            image_resp = client.images.generate(
+                model="dall-e-3",
+                prompt=prompt[:950],
+                size="1024x1792",
+                quality="standard",
+                n=1,
+            )
+            dalle_url = image_resp.data[0].url
+            if dalle_url:
+                resp = httpx.get(dalle_url, timeout=60.0)
+                if resp.status_code == 200:
+                    start_image_path.write_bytes(resp.content)
+                    return start_image_path
+                errors.append(f"DALL-E 3 이미지 다운로드 실패 ({resp.status_code}): {dalle_url}")
+        except Exception as exc:
+            errors.append(f"DALL-E 3 생성 실패: {exc}")
+
+    if errors:
+        raise RuntimeError(" | ".join(errors))
 
     # 3. Fallback 그래픽 생성
     _generate_fallback_clay_image(start_image_path, scene_id, prompt, is_final=False)
@@ -939,6 +964,7 @@ def generate_scene_video_for_project(
         duration=duration,
         multi_shots=multi_shots,
         timeout_minutes=20,
+        api_key=settings.higgsfield_api_key,
     )
 
     resp = httpx.get(video_url, timeout=120.0)
