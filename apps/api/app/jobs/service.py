@@ -58,11 +58,12 @@ def update_job_state(
         job.started_at = timestamp
     if state in ("succeeded", "failed"):
         job.ended_at = timestamp
+    safe_message = message[:1990] + "..." if len(message) > 2000 else message
     if state == "failed":
-        job.error_message = error_message or message
+        job.error_message = error_message or safe_message
     elif error_message is not None:
         job.error_message = error_message
-    job.logs.append(JobLog(message=message))
+    job.logs.append(JobLog(message=safe_message))
     if output_paths:
         job.output_paths.extend(output_paths)
     job = JobRecord.model_validate(job.model_dump())

@@ -2,6 +2,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,41 +30,71 @@ async function main() {
   console.log(`[Remotion] Target output: ${outputPath}`);
   console.log(`[Remotion] Video frames: ${rawProps.durationInFrames}, Subtitles count: ${rawProps.subtitles?.length || 0}`);
 
-  console.log("[Remotion] Bundling React composition...");
-  const entryPoint = path.resolve(__dirname, "src/index.ts");
   const projectRoot = path.resolve(__dirname, "../../");
-  const bundleLocation = await bundle({
-    entryPoint,
-    publicDir: projectRoot,
-  });
 
-  console.log("[Remotion] Selecting composition 'ShortsVideo'...");
-  const composition = await selectComposition({
-    serveUrl: bundleLocation,
-    id: "ShortsVideo",
-    inputProps: rawProps,
-  });
+  // Create isolated publicDir containing only the required media assets
+  // (Prevents Remotion from copying/symlinking the entire workspace root including node_modules)
+  const tempPublicDir = fs.mkdtempSync(path.join(os.tmpdir(), "remotion-public-"));
 
-  console.log(`[Remotion] Rendering ${composition.durationInFrames} frames (${(composition.durationInFrames / 30).toFixed(1)}s)...`);
-  const startTime = Date.now();
+  const copyAssetToPublic = (relPath) => {
+    if (!relPath || relPath.startsWith("http://") || relPath.startsWith("https://")) {
+      return;
+    }
+    const srcFile = path.resolve(projectRoot, relPath);
+    if (!fs.existsSync(srcFile)) {
+      return;
+    }
+    const destFile = path.join(tempPublicDir, relPath);
+    fs.mkdirSync(path.dirname(destFile), { recursive: true });
+    fs.copyFileSync(srcFile, destFile);
+  };
 
-  await renderMedia({
-    composition,
-    serveUrl: bundleLocation,
-    codec: "h264",
-    outputLocation: path.resolve(outputPath),
-    inputProps: rawProps,
-    concurrency: null, // CPU 코어 자동 최적화
-    onProgress: ({ progress }) => {
-      const pct = Math.round(progress * 100);
-      if (pct % 10 === 0) {
-        process.stdout.write(`\r[Remotion] Progress: ${pct}%`);
-      }
-    },
-  });
+  try {
+    copyAssetToPublic(rawProps.videoSrc);
+    copyAssetToPublic(rawProps.audioSrc);
+    copyAssetToPublic(rawProps.bgmSrc);
 
-  const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\n[Remotion] ✅ Successfully rendered to ${outputPath} in ${durationSec}s`);
+    console.log("[Remotion] Bundling React composition...");
+    const entryPoint = path.resolve(__dirname, "src/index.ts");
+    const bundleLocation = await bundle({
+      entryPoint,
+      publicDir: tempPublicDir,
+    });
+
+    console.log("[Remotion] Selecting composition 'ShortsVideo'...");
+    const composition = await selectComposition({
+      serveUrl: bundleLocation,
+      id: "ShortsVideo",
+      inputProps: rawProps,
+    });
+
+    console.log(`[Remotion] Rendering ${composition.durationInFrames} frames (${(composition.durationInFrames / 30).toFixed(1)}s)...`);
+    const startTime = Date.now();
+
+    await renderMedia({
+      composition,
+      serveUrl: bundleLocation,
+      codec: "h264",
+      outputLocation: path.resolve(outputPath),
+      inputProps: rawProps,
+      concurrency: null, // CPU 코어 자동 최적화
+      onProgress: ({ progress }) => {
+        const pct = Math.round(progress * 100);
+        if (pct % 10 === 0) {
+          process.stdout.write(`\r[Remotion] Progress: ${pct}%`);
+        }
+      },
+    });
+
+    const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\n[Remotion] ✅ Successfully rendered to ${outputPath} in ${durationSec}s`);
+  } finally {
+    try {
+      fs.rmSync(tempPublicDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+  }
 }
 
 main().catch((err) => {
