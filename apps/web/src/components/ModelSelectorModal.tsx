@@ -8,7 +8,7 @@ export interface ModelOption {
   readonly badge?: string;
   readonly badgeType?: "new" | "free" | "popular" | "recommended" | "value";
   readonly tags?: readonly string[];
-  readonly iconType: "flux" | "kling" | "google" | "higgsfield" | "wan" | "seedance" | "grok" | "banana" | "gpt" | "minimax";
+  readonly iconType: "flux" | "kling" | "google" | "higgsfield" | "wan" | "seedance" | "grok" | "banana" | "gpt" | "minimax" | "renoise";
 }
 
 // 이미지 모델 선택 UI의 기본값 (백엔드 DEFAULT_IMAGE_MODEL과 동일하게 유지)
@@ -64,6 +64,32 @@ export const IMAGE_MODELS: readonly ModelOption[] = [
     badgeType: "recommended",
     tags: ["세로형", "정밀 프롬프트"],
     iconType: "gpt"
+  },
+  {
+    id: "renoise:nano-banana-pro",
+    name: "Nano Banana Pro (Renoise)",
+    provider: "Renoise",
+    description: "Renoise 경유 Nano Banana Pro — 클레이/인포그래픽 텍스처에 강한 고품질 세로형",
+    badge: "Renoise",
+    badgeType: "new",
+    tags: ["9:16 특화", "1k-4k"],
+    iconType: "renoise"
+  },
+  {
+    id: "renoise:gpt-image-2",
+    name: "GPT Image 2 (Renoise)",
+    provider: "Renoise",
+    description: "Renoise 경유 GPT Image 2 — 정밀 프롬프트와 텍스트 렌더링",
+    tags: ["정밀 프롬프트"],
+    iconType: "renoise"
+  },
+  {
+    id: "renoise:seedream-5-0-pro",
+    name: "Seedream 5.0 Pro (Renoise)",
+    provider: "Renoise",
+    description: "Renoise 경유 Seedream 5.0 Pro — 포토리얼/시네마틱 질감",
+    tags: ["포토리얼"],
+    iconType: "renoise"
   }
 ];
 
@@ -153,6 +179,32 @@ export const VIDEO_MODELS: readonly ModelOption[] = [
     description: "Google의 멀티 이미지 영상 생성",
     tags: ["멀티 이미지"],
     iconType: "google"
+  },
+  {
+    id: "renoise:seedance-2.5-byteplus",
+    name: "Seedance 2.5 (Renoise)",
+    provider: "Renoise",
+    description: "Renoise 기본 비디오 모델 — 16~30초 연속 시퀀스와 다중 레퍼런스",
+    badge: "Renoise 기본",
+    badgeType: "new",
+    tags: ["레퍼런스 강함", "16-30초"],
+    iconType: "renoise"
+  },
+  {
+    id: "renoise:kling-3.0-omni",
+    name: "Kling 3.0 Omni (Renoise)",
+    provider: "Renoise",
+    description: "Renoise 경유 Kling 3.0 Omni — 시네마틱 프롬프트 기반 영상",
+    tags: ["시네마틱"],
+    iconType: "renoise"
+  },
+  {
+    id: "renoise:hailuo-h3",
+    name: "MiniMax H3 (Renoise)",
+    provider: "Renoise",
+    description: "Renoise 경유 MiniMax H3 — 네이티브 오디오 포함",
+    tags: ["오디오 포함"],
+    iconType: "renoise"
   }
 ];
 
@@ -167,7 +219,8 @@ function ModelIcon({ type }: { readonly type: ModelOption["iconType"] }) {
     grok: { symbol: "⊘", color: "#cbd5e1" },
     banana: { symbol: "🍌", color: "#eab308" },
     gpt: { symbol: "🧠", color: "#10b981" },
-    minimax: { symbol: "M", color: "#10b981" }
+    minimax: { symbol: "M", color: "#10b981" },
+    renoise: { symbol: "◈", color: "#22d3ee" }
   };
   const icon = iconMap[type] ?? { symbol: "❖", color: "#38bdf8" };
 

@@ -23,6 +23,12 @@ class AppSettings(BaseModel):
     openai_api_key: str = ""
     youtube_api_key: str = ""
     higgsfield_api_key: str = ""
+    renoise_mcp_url: str = "https://renoise.ai/api/public/mcp"
+    renoise_token: str = ""
+    image_provider: str = "higgsfield"
+    video_provider: str = "higgsfield"
+    renoise_image_model: str = "nano-banana-pro"
+    renoise_video_model: str = "seedance-2.5-byteplus"
     qwen3_tts_base_url: str = "http://127.0.0.1:7860"
     reference_voice_path: str = "assets/reference_voice/reference_voice.mp3"
     reference_voice_text: str = (
@@ -54,6 +60,12 @@ ENV_TO_FIELD = {
     "OPENAI_API_KEY": "openai_api_key",
     "YOUTUBE_API_KEY": "youtube_api_key",
     "HIGGSFIELD_API_KEY": "higgsfield_api_key",
+    "RENOISE_MCP_URL": "renoise_mcp_url",
+    "RENOISE_TOKEN": "renoise_token",
+    "IMAGE_PROVIDER": "image_provider",
+    "VIDEO_PROVIDER": "video_provider",
+    "RENOISE_IMAGE_MODEL": "renoise_image_model",
+    "RENOISE_VIDEO_MODEL": "renoise_video_model",
     "QWEN3_TTS_BASE_URL": "qwen3_tts_base_url",
     "REFERENCE_VOICE_PATH": "reference_voice_path",
     "REFERENCE_VOICE_TEXT": "reference_voice_text",

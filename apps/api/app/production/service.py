@@ -15,6 +15,7 @@ from openai import OpenAI
 
 from app.core.paths import find_repo_root
 from app.core.settings import AppSettings
+from app.production.renoise_client import RenoiseClient
 from app.production.models import (
     ConceptKit,
     ContinuityState,
@@ -36,6 +37,19 @@ SPEED_RATE = 1.2
 # 기본 이미지 모델: OpenAI Images API 직접 호출 (DALL-E 3는 OpenAI에서 서비스 종료됨)
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
 OPENAI_IMAGE_MODEL = DEFAULT_IMAGE_MODEL
+
+RENOISE_MODEL_PREFIX = "renoise:"
+HIGGSFIELD_MODEL_PREFIX = "higgsfield:"
+
+
+def _resolve_model_provider(model_name: str, default_provider: str) -> tuple[str, str]:
+    """Split an optional `provider:model` id (e.g. `renoise:nano-banana-pro`)."""
+    name = (model_name or "").strip()
+    for prefix in (RENOISE_MODEL_PREFIX, HIGGSFIELD_MODEL_PREFIX):
+        if name.lower().startswith(prefix) and name[len(prefix):].strip():
+            return prefix[:-1], name[len(prefix):].strip()
+    provider = (default_provider or "higgsfield").strip().lower()
+    return (provider if provider in ("renoise", "higgsfield") else "higgsfield"), name
 
 SCENE_TRANSITION_KEYWORDS = [
     "하지만", "결론은", "근데", "자 ", "그럼", "여기서부터", 
@@ -861,15 +875,34 @@ def generate_scene_image_for_project(
         except Exception:
             pass
 
-    # 1. 힉스필드 모델 시도 (nano_banana_pro, gpt_image_2, seedream_v5_pro, flux_3_image 등)
+    provider, remote_model = _resolve_model_provider(model_name, settings.image_provider)
+
+    # 0. Renoise 이미지 생성 (`renoise:<model>` 모델 ID 또는 IMAGE_PROVIDER=renoise)
     errors: list[str] = []
-    if model_name != OPENAI_IMAGE_MODEL:
+    if provider == "renoise":
+        try:
+            renoise_model = remote_model or settings.renoise_image_model
+            with RenoiseClient(settings.renoise_mcp_url, settings.renoise_token) as client:
+                data = client.generate_image(
+                    prompt,
+                    model=renoise_model,
+                    aspect_ratio="9:16",
+                    resolution="2k" if any(k in renoise_model for k in ("pro", "gpt", "seedream")) else "1k",
+                    label=f"scene {scene_id}",
+                )
+            start_image_path.write_bytes(data)
+            return start_image_path
+        except Exception as exc:
+            errors.append(f"Renoise ({remote_model}) 생성 실패: {exc}")
+
+    # 1. 힉스필드 모델 시도 (nano_banana_pro, gpt_image_2, seedream_v5_pro, flux_3_image 등)
+    if provider != "renoise" and remote_model != OPENAI_IMAGE_MODEL:
         try:
             image_url = _run_higgsfield_generate(
-                job_type=model_name or "nano_banana_pro",
+                job_type=remote_model or "nano_banana_pro",
                 prompt=prompt,
                 aspect_ratio="9:16",
-                resolution="2k" if "gpt" in model_name or "seedream" in model_name else "1k",
+                resolution="2k" if "gpt" in remote_model or "seedream" in remote_model else "1k",
                 api_key=settings.higgsfield_api_key,
             )
             resp = httpx.get(image_url, timeout=90.0)
@@ -927,6 +960,7 @@ def generate_scene_video_for_project(
     match_prev_frame: bool = True,
 ) -> Path:
     model_name = MODEL_ALIAS_MAP.get(model_name, model_name)
+    provider, remote_model = _resolve_model_provider(model_name, settings.video_provider)
     video_scenes_path = project_dir / VIDEO_SCENES_FILENAME
     if not video_scenes_path.exists():
         raise FileNotFoundError("video_scenes.json이 없습니다. 먼저 비디오 씬을 생성해주세요.")
@@ -959,7 +993,11 @@ def generate_scene_video_for_project(
         prev_final_frame = scenes_dir / f"scene_{scene_id - 1:02d}_final.png"
         if prev_final_frame.exists():
             start_image_path = prev_final_frame
-            end_image = current_scene_image if any(k in model_name for k in ("kling", "seedance", "minimax")) else None
+            end_image = (
+                current_scene_image
+                if provider == "higgsfield" and any(k in remote_model for k in ("kling", "seedance", "minimax"))
+                else None
+            )
         else:
             start_image_path = current_scene_image
             end_image = None
@@ -974,23 +1012,37 @@ def generate_scene_video_for_project(
     video_path = scenes_dir / f"scene_{scene_id:02d}_video.mp4"
     final_frame_path = scenes_dir / f"scene_{scene_id:02d}_final.png"
 
-    # 힉스필드 비디오 생성 CLI 실행 (Kling/Seedance 등은 start_image와 end_image 2개 모두 전달)
-    video_url = _run_higgsfield_generate(
-        job_type=model_name or "kling_o3_flf",
-        prompt=prompt,
-        start_image=start_image_path,
-        end_image=end_image,
-        aspect_ratio="9:16",
-        duration=duration,
-        multi_shots=multi_shots,
-        timeout_minutes=20,
-        api_key=settings.higgsfield_api_key,
-    )
+    if provider == "renoise":
+        # Renoise(Seedance/Kling 등) — 시작 이미지를 자료로 업로드해 첫 프레임 레퍼런스로 사용
+        with RenoiseClient(settings.renoise_mcp_url, settings.renoise_token) as client:
+            data = client.generate_video(
+                prompt,
+                model=remote_model or settings.renoise_video_model,
+                start_image=start_image_path,
+                duration=max(4, int(duration)),
+                aspect_ratio="9:16",
+                resolution="720p",
+                label=f"scene {scene_id}",
+            )
+        video_path.write_bytes(data)
+    else:
+        # 힉스필드 비디오 생성 CLI 실행 (Kling/Seedance 등은 start_image와 end_image 2개 모두 전달)
+        video_url = _run_higgsfield_generate(
+            job_type=remote_model or "kling_o3_flf",
+            prompt=prompt,
+            start_image=start_image_path,
+            end_image=end_image,
+            aspect_ratio="9:16",
+            duration=duration,
+            multi_shots=multi_shots,
+            timeout_minutes=20,
+            api_key=settings.higgsfield_api_key,
+        )
 
-    resp = httpx.get(video_url, timeout=120.0)
-    if resp.status_code != 200:
-        raise RuntimeError(f"비디오 다운로드 실패 ({resp.status_code}): {video_url}")
-    video_path.write_bytes(resp.content)
+        resp = httpx.get(video_url, timeout=120.0)
+        if resp.status_code != 200:
+            raise RuntimeError(f"비디오 다운로드 실패 ({resp.status_code}): {video_url}")
+        video_path.write_bytes(resp.content)
 
     # ffmpeg으로 생성된 비디오의 실제 마지막 프레임 정밀 추출
     try:
