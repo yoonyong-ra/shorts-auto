@@ -11,6 +11,9 @@ export interface ModelOption {
   readonly iconType: "flux" | "kling" | "google" | "higgsfield" | "wan" | "seedance" | "grok" | "banana" | "gpt" | "minimax";
 }
 
+// 이미지 모델 선택 UI의 기본값 (백엔드 DEFAULT_IMAGE_MODEL과 동일하게 유지)
+export const DEFAULT_IMAGE_MODEL = "gpt-image-2";
+
 export const IMAGE_MODELS: readonly ModelOption[] = [
   {
     id: "nano_banana_pro",
@@ -24,7 +27,7 @@ export const IMAGE_MODELS: readonly ModelOption[] = [
   },
   {
     id: "gpt_image_2",
-    name: "GPT Image 2",
+    name: "GPT Image 2 (Higgsfield)",
     provider: "OpenAI / Higgsfield",
     description: "복합 지시 프롬프트와 논리적 사물 배치, 텍스트 렌더링에 강한 모델",
     badge: "GPT 대표",
@@ -53,11 +56,13 @@ export const IMAGE_MODELS: readonly ModelOption[] = [
     iconType: "flux"
   },
   {
-    id: "dall-e-3",
-    name: "OpenAI DALL-E 3",
+    id: "gpt-image-2",
+    name: "GPT Image 2 (OpenAI Direct)",
     provider: "OpenAI Direct",
-    description: "OpenAI API 직접 연결을 통한 창의적 스타일 일러스트레이션",
-    tags: ["클래식"],
+    description: "OpenAI API 직접 연결을 통한 고품질 세로형 이미지 생성 (기본 모델)",
+    badge: "기본값",
+    badgeType: "recommended",
+    tags: ["세로형", "정밀 프롬프트"],
     iconType: "gpt"
   }
 ];

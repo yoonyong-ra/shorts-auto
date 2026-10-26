@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ProductionState } from "../types";
+import { planVideoBatch } from "../sceneVideoBatch";
 import {
+  DEFAULT_IMAGE_MODEL,
   IMAGE_MODELS,
   VIDEO_MODELS,
   ModelSelectorModal,
@@ -57,7 +59,7 @@ export function ProductionPanel({
   onTitleChange
 }: ProductionPanelProps) {
   const [expandedPromptId, setExpandedPromptId] = useState<number | null>(null);
-  const [imageModel, setImageModel] = useState<string>("nano_banana_pro");
+  const [imageModel, setImageModel] = useState<string>(DEFAULT_IMAGE_MODEL);
   const [videoModel, setVideoModel] = useState<string>("kling_o3_flf");
   const [modalMode, setModalMode] = useState<"image" | "video" | null>(null);
   const [multiShotsMap, setMultiShotsMap] = useState<Record<number, boolean>>({});
@@ -222,15 +224,24 @@ export function ProductionPanel({
     if (!onGenerateSceneVideo || videoScenes.length === 0) return;
     setBusyAction("all_videos");
     setRenderError(null);
+
+    // 이어하기: 이미 비디오가 생성된 씬은 건너뛰고 남은 씬만 생성한다
+    const { pending, skippedCount } = planVideoBatch(videoScenes);
+    const skipNote = skippedCount > 0 ? ` · 기존 생성분 ${skippedCount}개 건너뜀` : "";
+
     try {
-      for (let i = 0; i < videoScenes.length; i++) {
-        const sc = videoScenes[i];
+      if (pending.length === 0) {
+        setBatchProgressText("모든 씬 비디오가 이미 생성되어 있습니다. 최종 렌더링으로 진행합니다...");
+      }
+
+      for (let i = 0; i < pending.length; i++) {
+        const sc = pending[i];
         const scId = sc.scene_id;
         const isMatched = matchPrevMap[scId] ?? (scId > 1);
         const isMulti = multiShotsMap[scId] ?? false;
         const dur = Math.max(4, Math.round(sc.target_duration));
 
-        setBatchProgressText(`[${i + 1}/${videoScenes.length}] Scene ${scId} AI 비디오 생성 중... (${currentVideoModel.name})`);
+        setBatchProgressText(`[${i + 1}/${pending.length}] Scene ${scId} AI 비디오 생성 중... (${currentVideoModel.name})${skipNote}`);
         setBusySceneId(scId);
 
         await onGenerateSceneVideo(scId, videoModel, dur, isMulti, isMatched);

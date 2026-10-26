@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -31,6 +32,10 @@ VIDEO_SCENES_FILENAME = "video_scenes.json"
 SCENES_DIR_NAME = "scenes"
 FPS = 30
 SPEED_RATE = 1.2
+
+# 기본 이미지 모델: OpenAI Images API 직접 호출 (DALL-E 3는 OpenAI에서 서비스 종료됨)
+DEFAULT_IMAGE_MODEL = "gpt-image-2"
+OPENAI_IMAGE_MODEL = DEFAULT_IMAGE_MODEL
 
 SCENE_TRANSITION_KEYWORDS = [
     "하지만", "결론은", "근데", "자 ", "그럼", "여기서부터", 
@@ -179,9 +184,16 @@ def generate_tts_for_project(project_dir: Path, settings: AppSettings) -> Path:
     event_id = _call_gradio_api(base_url, "/generate_voice_clone", clone_data)
     result_data = _get_gradio_result(base_url, "/generate_voice_clone", event_id)
 
-    audio_file_info = result_data[0]
+    # Gradio returns (audio_file_info, status_text). The status text carries the
+    # server-side reason (model load failure, missing ref_text, OOM, ...) whenever
+    # the audio element is None, so never drop it from the error message.
+    audio_file_info = result_data[0] if isinstance(result_data, list) and result_data else None
     if not audio_file_info:
-        raise RuntimeError("TTS 음성 생성 응답에 파일 정보가 없습니다.")
+        server_status = ""
+        if isinstance(result_data, list) and len(result_data) > 1 and result_data[1]:
+            server_status = str(result_data[1]).strip()
+        detail = f" (TTS 서버: {server_status})" if server_status else ""
+        raise RuntimeError(f"TTS 음성 생성 응답에 파일 정보가 없습니다.{detail}")
 
     remote_path = audio_file_info.get("path")
     audio_download_url = f"{base_url.rstrip('/')}/gradio_api/file={remote_path}"
@@ -811,7 +823,7 @@ def generate_scene_image_for_project(
     project_dir: Path,
     scene_id: int,
     settings: AppSettings,
-    model_name: str = "nano_banana_pro",
+    model_name: str = DEFAULT_IMAGE_MODEL,
 ) -> Path:
     video_scenes_path = project_dir / VIDEO_SCENES_FILENAME
     if not video_scenes_path.exists():
@@ -851,7 +863,7 @@ def generate_scene_image_for_project(
 
     # 1. 힉스필드 모델 시도 (nano_banana_pro, gpt_image_2, seedream_v5_pro, flux_3_image 등)
     errors: list[str] = []
-    if model_name != "dall-e-3":
+    if model_name != OPENAI_IMAGE_MODEL:
         try:
             image_url = _run_higgsfield_generate(
                 job_type=model_name or "nano_banana_pro",
@@ -868,26 +880,34 @@ def generate_scene_image_for_project(
         except Exception as exc:
             errors.append(f"Higgsfield ({model_name}) 생성 실패: {exc}")
 
-    # 2. OpenAI DALL-E 3 시도
+    # 2. OpenAI Images API 폴백 (DALL-E 3는 2026년에 서비스 종료 → gpt-image 계열 사용)
     if settings.openai_api_key:
         try:
             client = OpenAI(api_key=settings.openai_api_key)
             image_resp = client.images.generate(
-                model="dall-e-3",
+                model=OPENAI_IMAGE_MODEL,
                 prompt=prompt[:950],
-                size="1024x1792",
-                quality="standard",
+                size="1024x1536",  # 세로형(9:16)에 가장 가까운 지원 비율
+                quality="high",
                 n=1,
             )
-            dalle_url = image_resp.data[0].url
-            if dalle_url:
-                resp = httpx.get(dalle_url, timeout=60.0)
-                if resp.status_code == 200:
-                    start_image_path.write_bytes(resp.content)
-                    return start_image_path
-                errors.append(f"DALL-E 3 이미지 다운로드 실패 ({resp.status_code}): {dalle_url}")
+            item = image_resp.data[0]
+            image_bytes = None
+            b64_payload = getattr(item, "b64_json", None)
+            if b64_payload:
+                image_bytes = base64.b64decode(b64_payload)
+            elif getattr(item, "url", None):
+                dl = httpx.get(item.url, timeout=90.0)
+                if dl.status_code == 200:
+                    image_bytes = dl.content
+                else:
+                    errors.append(f"OpenAI 이미지 다운로드 실패 ({dl.status_code}): {item.url}")
+            if image_bytes:
+                start_image_path.write_bytes(image_bytes)
+                return start_image_path
+            errors.append("OpenAI 이미지 응답에 이미지 데이터가 없습니다.")
         except Exception as exc:
-            errors.append(f"DALL-E 3 생성 실패: {exc}")
+            errors.append(f"OpenAI 이미지 생성 실패 ({OPENAI_IMAGE_MODEL}): {exc}")
 
     if errors:
         raise RuntimeError(" | ".join(errors))
@@ -1245,7 +1265,7 @@ def refine_and_regenerate_scene(
 
     # target에 따른 실제 재생성 실행
     if target in ("image", "both"):
-        img_model = model_name or "nano_banana_pro"
+        img_model = model_name or DEFAULT_IMAGE_MODEL
         generate_scene_image_for_project(project_dir, scene_id, settings, model_name=img_model)
 
     if target in ("video", "both"):

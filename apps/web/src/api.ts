@@ -197,7 +197,7 @@ export function generateConcepts(projectId: string): Promise<ProductionState> {
 export function generateSceneImage(
   projectId: string,
   sceneId: number,
-  model: string = "nano_banana_pro"
+  model: string = "gpt-image-2"
 ): Promise<ProductionState> {
   return request<ProductionState>(
     `/api/projects/${encodeURIComponent(projectId)}/production/scenes/${sceneId}/image?model=${encodeURIComponent(model)}`,
@@ -207,7 +207,7 @@ export function generateSceneImage(
 
 export function generateAllSceneImages(
   projectId: string,
-  model: string = "nano_banana_pro"
+  model: string = "gpt-image-2"
 ): Promise<ProductionState> {
   return request<ProductionState>(
     `/api/projects/${encodeURIComponent(projectId)}/production/scenes/images?model=${encodeURIComponent(model)}`,

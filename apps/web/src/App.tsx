@@ -446,7 +446,7 @@ export default function App() {
     }
   }
 
-  async function handleGenerateAllSceneImages(model: string = "nano_banana_pro") {
+  async function handleGenerateAllSceneImages(model: string = "gpt-image-2") {
     if (!selectedProject) {
       return;
     }

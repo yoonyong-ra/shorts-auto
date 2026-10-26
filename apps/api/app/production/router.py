@@ -11,6 +11,7 @@ from app.jobs.service import append_job, update_job_state
 from app.production.models import FeedbackRegenerateRequest, ProductionState, RenderShortsRequest, UpdateScenePromptsRequest
 from app.production.service import (
     CONCEPT_KIT_FILENAME,
+    DEFAULT_IMAGE_MODEL,
     RAW_STT_FILENAME,
     SCENE_DATA_FILENAME,
     SCENES_DIR_NAME,
@@ -238,7 +239,7 @@ def create_production_router(
     def generate_scene_image(
         project_id: str,
         scene_id: int,
-        model: str = "nano_banana_pro",
+        model: str = DEFAULT_IMAGE_MODEL,
         outputs: Path = Depends(outputs_dir_provider),
         settings: AppSettings = Depends(settings_provider),
     ):
@@ -254,7 +255,7 @@ def create_production_router(
     @router.post("/scenes/images")
     def generate_all_scene_images(
         project_id: str,
-        model: str = "nano_banana_pro",
+        model: str = DEFAULT_IMAGE_MODEL,
         outputs: Path = Depends(outputs_dir_provider),
         settings: AppSettings = Depends(settings_provider),
     ):
